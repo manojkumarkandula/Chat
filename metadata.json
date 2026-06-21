@@ -1,0 +1,8 @@
+{
+  "name": "Two-Person Private Chat",
+  "description": "A beautifully minimal private chat room restricted to exactly two participants with real-time messages, media sharing, and presence indicators.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

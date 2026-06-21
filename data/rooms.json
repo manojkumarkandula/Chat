@@ -1,0 +1,253 @@
+{
+  "ebj1-8dgs-mcoq": {
+    "id": "ebj1-8dgs-mcoq",
+    "participants": [
+      {
+        "id": "usr-0b555io48c",
+        "name": "Manoj",
+        "joinedAt": "2026-06-21T15:47:47.169Z",
+        "isOnline": false,
+        "isTyping": false
+      }
+    ],
+    "messages": [],
+    "maxParticipants": 2
+  },
+  "dodp-b5d7-in28": {
+    "id": "dodp-b5d7-in28",
+    "participants": [
+      {
+        "id": "usr-i0tiz32zz9",
+        "name": "Manoj",
+        "joinedAt": "2026-06-21T15:50:21.475Z",
+        "isOnline": false,
+        "isTyping": false
+      },
+      {
+        "id": "usr-jjrpo7idhf",
+        "name": "man",
+        "joinedAt": "2026-06-21T15:50:34.285Z",
+        "isOnline": false,
+        "isTyping": false
+      }
+    ],
+    "messages": [
+      {
+        "id": "msg-awzg4lor",
+        "senderId": "usr-i0tiz32zz9",
+        "senderName": "Manoj",
+        "type": "text",
+        "text": "Hi",
+        "timestamp": "2026-06-21T15:50:45.175Z",
+        "status": "read"
+      },
+      {
+        "id": "msg-mh1bvt6j",
+        "senderId": "usr-i0tiz32zz9",
+        "senderName": "Manoj",
+        "type": "text",
+        "text": "How are you",
+        "timestamp": "2026-06-21T15:50:51.550Z",
+        "status": "read"
+      },
+      {
+        "id": "msg-la0xnoot",
+        "senderId": "usr-i0tiz32zz9",
+        "senderName": "Manoj",
+        "type": "file",
+        "text": "",
+        "file": {
+          "name": "gemini_generated_image_8jue618jue618jue.png",
+          "type": "image/png",
+          "size": 8894033,
+          "url": "/uploads/1782057107760-gemini_generated_image_8jue618jue618jue.png"
+        },
+        "timestamp": "2026-06-21T15:51:47.754Z",
+        "status": "read"
+      },
+      {
+        "id": "msg-dy9vh0m3",
+        "senderId": "usr-i0tiz32zz9",
+        "senderName": "Manoj",
+        "type": "file",
+        "text": "",
+        "file": {
+          "name": "Gemini_Generated_Image_oo6v0coo6v0coo6v (1).png",
+          "type": "image/png",
+          "size": 5140027,
+          "url": "/uploads/1782057107927-Gemini_Generated_Image_oo6v0coo6v0coo6v1.png"
+        },
+        "timestamp": "2026-06-21T15:51:47.921Z",
+        "status": "read"
+      },
+      {
+        "id": "msg-g112kcgi",
+        "senderId": "usr-i0tiz32zz9",
+        "senderName": "Manoj",
+        "type": "file",
+        "text": "",
+        "file": {
+          "name": "ME.jpg",
+          "type": "image/jpeg",
+          "size": 79773,
+          "url": "/uploads/1782057107977-ME.jpg"
+        },
+        "timestamp": "2026-06-21T15:51:47.977Z",
+        "status": "read"
+      },
+      {
+        "id": "msg-qxb6sz2m",
+        "senderId": "usr-jjrpo7idhf",
+        "senderName": "man",
+        "type": "file",
+        "text": "",
+        "file": {
+          "name": "IMG-20260603-WA0013(1) (1).png",
+          "type": "image/png",
+          "size": 3324589,
+          "url": "/uploads/1782057154285-IMG-20260603-WA001311.png"
+        },
+        "timestamp": "2026-06-21T15:52:34.281Z",
+        "status": "read"
+      }
+    ],
+    "maxParticipants": 2
+  },
+  "bnlw-6ffi-8e2c": {
+    "id": "bnlw-6ffi-8e2c",
+    "participants": [
+      {
+        "id": "usr-i0tiz32zz9",
+        "name": "Manoj",
+        "joinedAt": "2026-06-21T15:54:28.839Z",
+        "isOnline": false,
+        "isTyping": false
+      }
+    ],
+    "messages": [],
+    "maxParticipants": 2
+  },
+  "gnym-p02b-r0fm": {
+    "id": "gnym-p02b-r0fm",
+    "participants": [
+      {
+        "id": "usr-i0tiz32zz9",
+        "name": "Manoj",
+        "joinedAt": "2026-06-21T16:05:36.035Z",
+        "isOnline": false,
+        "isTyping": false
+      },
+      {
+        "id": "usr-jjrpo7idhf",
+        "name": "Manoj2",
+        "joinedAt": "2026-06-21T16:05:57.045Z",
+        "isOnline": false,
+        "isTyping": false
+      }
+    ],
+    "messages": [],
+    "maxParticipants": 2
+  },
+  "xvpy-t9n5-rwb4": {
+    "id": "xvpy-t9n5-rwb4",
+    "participants": [
+      {
+        "id": "usr-m1ab9dm5n6",
+        "name": "Alice",
+        "joinedAt": "2026-06-21T16:10:50.846Z",
+        "isOnline": false,
+        "isTyping": false
+      }
+    ],
+    "messages": [],
+    "maxParticipants": 2
+  },
+  "klab-6md7-8wd7": {
+    "id": "klab-6md7-8wd7",
+    "participants": [
+      {
+        "id": "usr-i0tiz32zz9",
+        "name": "Manoj1",
+        "joinedAt": "2026-06-21T16:15:53.173Z",
+        "isOnline": false,
+        "isTyping": false
+      },
+      {
+        "id": "usr-jjrpo7idhf",
+        "name": "Manoj2",
+        "joinedAt": "2026-06-21T16:16:24.941Z",
+        "isOnline": false,
+        "isTyping": false
+      }
+    ],
+    "messages": [
+      {
+        "id": "msg-7pzd31sc",
+        "senderId": "usr-i0tiz32zz9",
+        "senderName": "Manoj1",
+        "type": "file",
+        "text": "",
+        "file": {
+          "name": "gemini_generated_image_8jue618jue618jue.png",
+          "type": "image/png",
+          "size": 8894033,
+          "url": "/uploads/1782058593061-gemini_generated_image_8jue618jue618jue.png"
+        },
+        "timestamp": "2026-06-21T16:16:33.052Z",
+        "status": "read",
+        "reactions": {}
+      },
+      {
+        "id": "msg-gp72pzjb",
+        "senderId": "usr-i0tiz32zz9",
+        "senderName": "Manoj1",
+        "type": "file",
+        "text": "",
+        "file": {
+          "name": "Gemini_Generated_Image_oo6v0coo6v0coo6v (1).png",
+          "type": "image/png",
+          "size": 5140027,
+          "url": "/uploads/1782058593259-Gemini_Generated_Image_oo6v0coo6v0coo6v1.png"
+        },
+        "timestamp": "2026-06-21T16:16:33.253Z",
+        "status": "read",
+        "reactions": {
+          "usr-jjrpo7idhf": "👍"
+        }
+      },
+      {
+        "id": "msg-8e7qni2f",
+        "senderId": "usr-i0tiz32zz9",
+        "senderName": "Manoj1",
+        "type": "file",
+        "text": "",
+        "file": {
+          "name": "ME.jpg",
+          "type": "image/jpeg",
+          "size": 79773,
+          "url": "/uploads/1782058593326-ME.jpg"
+        },
+        "timestamp": "2026-06-21T16:16:33.325Z",
+        "status": "read",
+        "reactions": {}
+      },
+      {
+        "id": "msg-e05nz78p",
+        "senderId": "usr-jjrpo7idhf",
+        "senderName": "Manoj2",
+        "type": "file",
+        "text": "",
+        "file": {
+          "name": "image.png",
+          "type": "image/png",
+          "size": 58841,
+          "url": "/uploads/1782058635603-image.png"
+        },
+        "timestamp": "2026-06-21T16:17:15.602Z",
+        "status": "read",
+        "reactions": {}
+      }
+    ],
+    "maxParticipants": 2
+  }
+}
