@@ -32,14 +32,14 @@ export default function App() {
 
   // Initialize or fetch secure ID from persistence
   useEffect(() => {
-    let storedUid = localStorage.getItem("twofold_user_id");
+    let storedUid = localStorage.getItem("tenfold_user_id");
     if (!storedUid) {
       storedUid = `usr-${Math.random().toString(36).substring(2, 12)}`;
-      localStorage.setItem("twofold_user_id", storedUid);
+      localStorage.setItem("tenfold_user_id", storedUid);
     }
     setUserId(storedUid);
 
-    const storedName = localStorage.getItem("twofold_user_name") || "";
+    const storedName = localStorage.getItem("tenfold_user_name") || "";
     setUserName(storedName);
 
     // Initial hash routing parse
@@ -96,7 +96,7 @@ export default function App() {
         if (amIParticipant) {
           setIsJoined(true);
           // If already registered, load the nickname
-          const savedName = localStorage.getItem("twofold_user_name") || "";
+          const savedName = localStorage.getItem("tenfold_user_name") || "";
           if (savedName) {
             setUserName(savedName);
           }
@@ -117,6 +117,15 @@ export default function App() {
       closeStream();
     };
   }, [currentRoomId, userId]);
+
+  // Request notification permissions when entered a channel
+  useEffect(() => {
+    if (isJoined && typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+    }
+  }, [isJoined]);
 
   // Clean-up Stream connection hook
   const closeStream = () => {
@@ -148,6 +157,17 @@ export default function App() {
     es.addEventListener("message", (event) => {
       try {
         const newMsg: Message = JSON.parse(event.data);
+        
+        // Trigger desktop notifications if inactive
+        if (newMsg.senderId !== uid && (document.hidden || !document.hasFocus())) {
+          if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+            new Notification("Secure Channel Update", {
+              body: "New content shared in Tenfold",
+              icon: "/icons/icon.png"
+            });
+          }
+        }
+
         setRoom((prev) => {
           if (!prev) return null;
           // De-duplicate in case of network bursts
@@ -314,7 +334,7 @@ export default function App() {
 
     try {
       // Store name
-      localStorage.setItem("twofold_user_name", name);
+      localStorage.setItem("tenfold_user_name", name);
       setUserName(name);
 
       const response = await fetch(`/api/rooms/${currentRoomId}/join`, {

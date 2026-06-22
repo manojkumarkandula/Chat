@@ -249,5 +249,174 @@
       }
     ],
     "maxParticipants": 2
+  },
+  "gdjg-hbzw-8hqm": {
+    "id": "gdjg-hbzw-8hqm",
+    "participants": [
+      {
+        "id": "usr-m1ab9dm5n6",
+        "name": "Subagent",
+        "joinedAt": "2026-06-22T06:23:06.733Z",
+        "isOnline": false,
+        "isTyping": false
+      }
+    ],
+    "messages": [],
+    "maxParticipants": 2
+  },
+  "8isv-4nu8-3i1v": {
+    "id": "8isv-4nu8-3i1v",
+    "participants": [
+      {
+        "id": "usr-m1ab9dm5n6",
+        "name": "Manoj",
+        "joinedAt": "2026-06-22T06:26:25.563Z",
+        "isOnline": false,
+        "isTyping": false
+      }
+    ],
+    "messages": [],
+    "maxParticipants": 2
+  },
+  "sosu-zl9i-zidn": {
+    "id": "sosu-zl9i-zidn",
+    "participants": [
+      {
+        "id": "usr-m1ab9dm5n6",
+        "name": "Manoj",
+        "joinedAt": "2026-06-22T06:26:40.631Z",
+        "isOnline": false,
+        "isTyping": false
+      },
+      {
+        "id": "usr-i0tiz32zz9",
+        "name": "M",
+        "joinedAt": "2026-06-22T06:26:47.947Z",
+        "isOnline": false,
+        "isTyping": false
+      }
+    ],
+    "messages": [
+      {
+        "id": "msg-3oq7vy8w",
+        "senderId": "usr-i0tiz32zz9",
+        "senderName": "M",
+        "type": "text",
+        "text": "Hlo",
+        "timestamp": "2026-06-22T06:26:54.893Z",
+        "status": "read",
+        "reactions": {}
+      },
+      {
+        "id": "msg-rzsct9hl",
+        "senderId": "usr-i0tiz32zz9",
+        "senderName": "M",
+        "type": "text",
+        "text": "Hlo",
+        "timestamp": "2026-06-22T06:27:23.583Z",
+        "status": "read",
+        "reactions": {}
+      }
+    ],
+    "maxParticipants": 2
+  },
+  "b21r-b2rg-r6j2": {
+    "id": "b21r-b2rg-r6j2",
+    "participants": [
+      {
+        "id": "usr-i0tiz32zz9",
+        "name": "Manoj",
+        "joinedAt": "2026-06-22T06:27:50.812Z",
+        "isOnline": false,
+        "isTyping": false
+      },
+      {
+        "id": "usr-jjrpo7idhf",
+        "name": "M",
+        "joinedAt": "2026-06-22T06:28:09.685Z",
+        "isOnline": false,
+        "isTyping": false
+      }
+    ],
+    "messages": [
+      {
+        "id": "msg-vr8ylstb",
+        "senderId": "usr-i0tiz32zz9",
+        "senderName": "Manoj",
+        "type": "text",
+        "text": "Hlo",
+        "timestamp": "2026-06-22T06:28:22.911Z",
+        "status": "read",
+        "reactions": {}
+      },
+      {
+        "id": "msg-n6xoygej",
+        "senderId": "usr-i0tiz32zz9",
+        "senderName": "Manoj",
+        "type": "file",
+        "text": "",
+        "file": {
+          "name": "ME.jpg",
+          "type": "image/jpeg",
+          "size": 79773,
+          "url": "/uploads/1782109838304-ME.jpg"
+        },
+        "timestamp": "2026-06-22T06:30:38.304Z",
+        "status": "read",
+        "reactions": {}
+      },
+      {
+        "id": "msg-dmliy7vt",
+        "senderId": "usr-i0tiz32zz9",
+        "senderName": "Manoj",
+        "type": "file",
+        "text": "",
+        "file": {
+          "name": "voice-note-1782109855544.webm",
+          "type": "audio/webm",
+          "size": 96896,
+          "url": "/uploads/1782109855858-voice-note-1782109855544.webm"
+        },
+        "timestamp": "2026-06-22T06:30:55.858Z",
+        "status": "read",
+        "reactions": {}
+      }
+    ],
+    "maxParticipants": 2
+  },
+  "jel8-xwzc-z6fa": {
+    "id": "jel8-xwzc-z6fa",
+    "participants": [
+      {
+        "id": "usr-i0tiz32zz9",
+        "name": "manoj",
+        "joinedAt": "2026-06-22T06:45:07.760Z",
+        "isOnline": false,
+        "isTyping": false
+      }
+    ],
+    "messages": [],
+    "maxParticipants": 2
+  },
+  "jlj2-zbk8-ti1b": {
+    "id": "jlj2-zbk8-ti1b",
+    "participants": [
+      {
+        "id": "usr-zootl3aw5p",
+        "name": "Manoj",
+        "joinedAt": "2026-06-22T07:09:11.244Z",
+        "isOnline": false,
+        "isTyping": false
+      },
+      {
+        "id": "usr-5oyxaoja83",
+        "name": "M",
+        "joinedAt": "2026-06-22T07:09:26.901Z",
+        "isOnline": false,
+        "isTyping": false
+      }
+    ],
+    "messages": [],
+    "maxParticipants": 2
   }
 }

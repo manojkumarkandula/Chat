@@ -1,0 +1,18 @@
+{
+  "name": "Tenfold Secure Chat",
+  "short_name": "Tenfold",
+  "description": "Secure, ephemeral, in-memory private chat rooms with screen capture restrictions.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080808",
+  "theme_color": "#080808",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

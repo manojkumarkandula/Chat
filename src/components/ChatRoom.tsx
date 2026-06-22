@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, DragEvent, ChangeEvent, FormEvent }
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Paperclip, Copy, Check, Users, LogOut, Send, 
-  Image as ImageIcon, FileText, Video as VideoIcon, Download, X, Eye
+  Image as ImageIcon, FileText, Video as VideoIcon, Download, X, Eye,
+  Camera, Mic, Trash2, RefreshCw
 } from "lucide-react";
 import { Room, Message, Participant } from "../types";
 import { formatBytes, formatTime } from "../utils";
@@ -67,6 +68,25 @@ export default function ChatRoom({
     return Object.entries(counts).map(([emoji, count]) => ({ emoji, count }));
   };
 
+  // Camera Modal States
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraMode, setCameraMode] = useState<"photo" | "video">("photo");
+  const [isRecordingVideo, setIsRecordingVideo] = useState(false);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+  const recordedVideoChunksRef = useRef<BlobPart[]>([]);
+  const cameraVideoRef = useRef<HTMLVideoElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const videoTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Voice Note Recorder States
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [voiceDuration, setVoiceDuration] = useState(0);
+  const voiceChunksRef = useRef<BlobPart[]>([]);
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isTypingStateRef = useRef<boolean>(false);
@@ -74,6 +94,235 @@ export default function ChatRoom({
 
   const touchTimerRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Hardware stream unmount cleanup
+  useEffect(() => {
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(t => t.stop());
+      }
+      if (videoTimerRef.current) clearInterval(videoTimerRef.current);
+      if (voiceTimerRef.current) clearInterval(voiceTimerRef.current);
+    };
+  }, [cameraStream]);
+
+  // Camera Stream Helpers
+  const startCamera = async (mode: "photo" | "video", face: "user" | "environment") => {
+    try {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+      const constraints: MediaStreamConstraints = {
+        video: { facingMode: face },
+        audio: mode === "video"
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      setCameraStream(stream);
+      if (cameraVideoRef.current) {
+        cameraVideoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error("Camera access failed:", err);
+      alert("Failed to access camera device. Please check permissions.");
+      setIsCameraModalOpen(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    if (videoTimerRef.current) clearInterval(videoTimerRef.current);
+    setVideoDuration(0);
+    setIsRecordingVideo(false);
+    recordedVideoChunksRef.current = [];
+  };
+
+  const toggleFacingMode = () => {
+    const nextFace = facingMode === "user" ? "environment" : "user";
+    setFacingMode(nextFace);
+    startCamera(cameraMode, nextFace);
+  };
+
+  const openCameraModal = () => {
+    setIsCameraModalOpen(true);
+    setCameraMode("photo");
+    setFacingMode("user");
+    setTimeout(() => startCamera("photo", "user"), 100);
+  };
+
+  const closeCameraModal = () => {
+    stopCamera();
+    setIsCameraModalOpen(false);
+  };
+
+  const capturePhoto = () => {
+    if (!cameraVideoRef.current) return;
+    const video = cameraVideoRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const base64 = canvas.toDataURL("image/jpeg");
+      onSendFile(`camera-snap-${Date.now()}.jpg`, base64, "image/jpeg");
+      closeCameraModal();
+    }
+  };
+
+  const startRecordingVideo = () => {
+    if (!cameraStream) return;
+    recordedVideoChunksRef.current = [];
+    try {
+      let recorder: MediaRecorder;
+      try {
+        recorder = new MediaRecorder(cameraStream, { mimeType: "video/webm;codecs=vp9" });
+      } catch (e) {
+        recorder = new MediaRecorder(cameraStream);
+      }
+
+      const streamToStop = cameraStream; // capture in closure to prevent state change conflicts
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          recordedVideoChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        // Stop the camera stream tracks after media recorder finishes writing buffer
+        try {
+          streamToStop.getTracks().forEach((track) => track.stop());
+        } catch (err) {
+          console.warn("Failed to clean up camera tracks:", err);
+        }
+        setCameraStream(null);
+        if (videoTimerRef.current) clearInterval(videoTimerRef.current);
+        setVideoDuration(0);
+        setIsRecordingVideo(false);
+
+        const mime = recorder.mimeType || "video/webm";
+        const blob = new Blob(recordedVideoChunksRef.current, { type: mime });
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          const base64 = reader.result as string;
+          if (base64) {
+            const ext = mime.includes("mp4") ? "mp4" : "webm";
+            await onSendFile(`video-record-${Date.now()}.${ext}`, base64, mime);
+          }
+        };
+        reader.readAsDataURL(blob);
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start(200);
+      setIsRecordingVideo(true);
+      setVideoDuration(0);
+
+      videoTimerRef.current = setInterval(() => {
+        setVideoDuration((prev) => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error("Failed to start media recorder:", err);
+      alert("Unable to start video recording.");
+    }
+  };
+
+  const stopRecordingVideo = () => {
+    if (mediaRecorderRef.current && isRecordingVideo) {
+      mediaRecorderRef.current.stop();
+      setIsCameraModalOpen(false);
+    }
+  };
+
+  // Voice Note Recorder Helpers
+  const startVoiceRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      voiceChunksRef.current = [];
+      
+      let recorder: MediaRecorder;
+      try {
+        recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      } catch (e) {
+        recorder = new MediaRecorder(stream);
+      }
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          voiceChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const blob = new Blob(voiceChunksRef.current, { type: "audio/webm" });
+        stream.getTracks().forEach(track => track.stop());
+
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          const base64 = reader.result as string;
+          if (base64) {
+            await onSendFile(`voice-note-${Date.now()}.webm`, base64, "audio/webm");
+          }
+        };
+        reader.readAsDataURL(blob);
+      };
+
+      voiceRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecordingVoice(true);
+      setVoiceDuration(0);
+
+      voiceTimerRef.current = setInterval(() => {
+        setVoiceDuration(prev => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error("Microphone access failed:", err);
+      alert("Failed to access microphone for voice note.");
+    }
+  };
+
+  const cancelVoiceRecording = () => {
+    if (voiceRecorderRef.current) {
+      voiceRecorderRef.current.onstop = () => {};
+      voiceRecorderRef.current.stop();
+      voiceRecorderRef.current = null;
+    }
+    if (voiceTimerRef.current) clearInterval(voiceTimerRef.current);
+    setIsRecordingVoice(false);
+    setVoiceDuration(0);
+    voiceChunksRef.current = [];
+  };
+
+  const sendVoiceRecording = () => {
+    if (voiceRecorderRef.current && isRecordingVoice) {
+      voiceRecorderRef.current.stop();
+      if (voiceTimerRef.current) clearInterval(voiceTimerRef.current);
+      setIsRecordingVoice(false);
+      setVoiceDuration(0);
+    }
+  };
+
+  const formatDuration = (seconds: number) => {
+    const min = Math.floor(seconds / 60).toString().padStart(2, "0");
+    const sec = (seconds % 60).toString().padStart(2, "0");
+    return `${min}:${sec}`;
+  };
+
+  const resumeScreen = () => {
+    if (document.hasFocus() && !document.hidden) {
+      setIsScreenSuspended(false);
+    } else {
+      window.focus();
+      setTimeout(() => {
+        if (document.hasFocus()) {
+          setIsScreenSuspended(false);
+        }
+      }, 100);
+    }
+  };
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -83,27 +332,30 @@ export default function ChatRoom({
     return () => document.removeEventListener("click", handleClose);
   }, [activeContextMenu]);
 
-  // Screen recording and screenshot protection
+  // Screen recording, screenshot, and media capture protection
   useEffect(() => {
     const handleBlur = () => setIsScreenSuspended(true);
-    const handleFocus = () => setIsScreenSuspended(false);
     const handleVisibility = () => {
       if (document.hidden) {
         setIsScreenSuspended(true);
-      } else {
-        setIsScreenSuspended(false);
       }
     };
 
     window.addEventListener("blur", handleBlur);
-    window.addEventListener("focus", handleFocus);
+    window.addEventListener("focus", handleBlur); // treat focusing as blurred state until verified
     document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("pagehide", handleBlur);
 
     // Block keyboard print / screen grab shortcuts
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "PrintScreen") {
         e.preventDefault();
         setIsScreenSuspended(true);
+        try {
+          navigator.clipboard.writeText("");
+        } catch (err) {
+          console.warn("Clipboard access restricted.", err);
+        }
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "p") {
         e.preventDefault();
@@ -121,21 +373,77 @@ export default function ChatRoom({
 
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.key === "PrintScreen") {
-        navigator.clipboard.writeText(""); // clear clipboard
+        try {
+          navigator.clipboard.writeText(""); // clear clipboard
+        } catch (err) {
+          console.warn("Clipboard access restricted.", err);
+        }
         setIsScreenSuspended(true);
         alert("Screenshots are blocked. Clipboard cleared.");
       }
     };
 
+    // Block right-clicks globally inside the chat room
+    const handleGlobalContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
     window.addEventListener("keydown", handleKeyDown, true);
     window.addEventListener("keyup", handleKeyUp, true);
+    document.addEventListener("contextmenu", handleGlobalContextMenu, true);
+
+    // Overriding navigator.mediaDevices APIs to block in-app screensharing
+    let originalGetDisplayMedia: any = null;
+    let originalGetUserMedia: any = null;
+
+    if (typeof navigator !== "undefined" && navigator.mediaDevices) {
+      try {
+        originalGetDisplayMedia = navigator.mediaDevices.getDisplayMedia;
+        navigator.mediaDevices.getDisplayMedia = async () => {
+          alert("Screen sharing is disabled on this secure application.");
+          throw new DOMException("Screen sharing is restricted for security.", "NotAllowedError");
+        };
+
+        if (navigator.mediaDevices.getUserMedia) {
+          originalGetUserMedia = navigator.mediaDevices.getUserMedia;
+          navigator.mediaDevices.getUserMedia = async (constraints) => {
+            if (constraints && typeof constraints === "object") {
+              const video = (constraints as any).video;
+              if (video && typeof video === "object") {
+                if (
+                  (video.mandatory && (video.mandatory.chromeMediaSource === "screen" || video.mandatory.chromeMediaSource === "desktop")) ||
+                  video.displaySurface
+                ) {
+                  alert("Screen sharing/capture is disabled on this secure application.");
+                  throw new DOMException("Screen sharing is restricted for security.", "NotAllowedError");
+                }
+              }
+            }
+            return originalGetUserMedia.call(navigator.mediaDevices, constraints);
+          };
+        }
+      } catch (err) {
+        console.warn("Could not override media capture APIs:", err);
+      }
+    }
 
     return () => {
       window.removeEventListener("blur", handleBlur);
-      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("focus", handleBlur);
       document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pagehide", handleBlur);
       window.removeEventListener("keydown", handleKeyDown, true);
       window.removeEventListener("keyup", handleKeyUp, true);
+      document.removeEventListener("contextmenu", handleGlobalContextMenu, true);
+
+      if (typeof navigator !== "undefined" && navigator.mediaDevices) {
+        if (originalGetDisplayMedia) {
+          navigator.mediaDevices.getDisplayMedia = originalGetDisplayMedia;
+        }
+        if (originalGetUserMedia) {
+          navigator.mediaDevices.getUserMedia = originalGetUserMedia;
+        }
+      }
     };
   }, []);
 
@@ -275,9 +583,11 @@ export default function ChatRoom({
     await onSendMessage(msg);
 
     // Refocus again after send API returns to ensure keyboard is persistent
-    if (chatInput) {
-      chatInput.focus();
-    }
+    setTimeout(() => {
+      if (chatInput) {
+        chatInput.focus();
+      }
+    }, 30);
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
@@ -391,6 +701,7 @@ export default function ChatRoom({
       const f = msg.file;
       const isImg = f.type.startsWith("image/");
       const isVid = f.type.startsWith("video/");
+      const isAud = f.type.startsWith("audio/") || f.name.endsWith(".webm") || f.name.endsWith(".mp3") || f.name.endsWith(".ogg") || f.name.endsWith(".wav");
 
       if (isImg) {
         return (
@@ -447,6 +758,34 @@ export default function ChatRoom({
                 download={f.name}
                 className="p-1 hover:text-brand-text hover:bg-brand-accent-light rounded transition-all ml-auto"
                 title="Download Video"
+              >
+                <Download className="w-3 h-3" />
+              </a>
+            </div>
+          </div>
+        );
+      }
+
+      if (isAud) {
+        return (
+          <div className="space-y-2 max-w-sm">
+            <div className="rounded-xl overflow-hidden border border-brand-border bg-brand-bg/40 p-2 flex items-center space-x-2 w-72">
+              <audio
+                src={f.url}
+                controls
+                preload="metadata"
+                className="w-full h-8 bg-transparent text-brand-text"
+              />
+            </div>
+            <div className="flex items-center space-x-1.5 text-[10px] text-brand-muted font-mono px-1">
+              <span className="truncate max-w-xs">{f.name}</span>
+              <span>·</span>
+              <span>{formatBytes(f.size)}</span>
+              <a
+                href={f.url}
+                download={f.name}
+                className="p-1 hover:text-brand-text hover:bg-brand-accent-light rounded transition-all ml-auto"
+                title="Download Audio"
               >
                 <Download className="w-3 h-3" />
               </a>
@@ -525,7 +864,12 @@ export default function ChatRoom({
       onDragLeave={handleDrag}
       onDrop={handleDrop}
     >
-      {/* Top Header Bar */}
+      <div 
+        className={`flex-1 flex flex-col justify-between transition-all duration-500 ${
+          isScreenSuspended ? "filter blur-3xl opacity-0 pointer-events-none select-none" : ""
+        }`}
+      >
+        {/* Top Header Bar */}
       <header className="px-6 py-4 bg-brand-card border-b border-brand-border flex items-center justify-between z-10 shadow-xs">
         {/* Participants States */}
         <div className="flex items-center space-x-4">
@@ -534,10 +878,7 @@ export default function ChatRoom({
               <span className="font-display font-medium text-sm text-brand-text">
                 {room.participants.length > 1 ? `Channel Chat (${room.participants.length}/${room.maxParticipants || 10})` : "Awaiting Guest..."}
               </span>
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-emerald-400" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-              </span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600/80" />
             </div>
             <div className="text-[10px] font-mono text-brand-muted hover:text-brand-text transition-colors mt-0.5 select-none flex items-center space-x-1.5">
               <span>{room.participants.filter(p => p.isOnline).length} online</span>
@@ -607,11 +948,11 @@ export default function ChatRoom({
           </motion.div>
 
           {/* Active room residents listing */}
-          <div className="flex justify-center flex-wrap gap-2 text-[10px] font-mono text-brand-muted/75 uppercase select-none">
+          <div className="flex justify-center flex-wrap gap-2 text-[10px] font-mono text-brand-muted/75 select-none">
             {room.participants.map((p) => (
-              <div key={p.id} className="flex items-center space-x-1 border border-brand-border rounded-full px-2 py-0.5 bg-brand-card">
-                <span className={`w-1 h-1 rounded-full ${p.isOnline ? "bg-emerald-500" : "bg-neutral-400"}`} />
-                <span>{p.name} ({getRoleLabel(p.id)})</span>
+              <div key={p.id} className="flex items-center space-x-1.5 border border-brand-border rounded-full px-2.5 py-0.5 bg-brand-card/65 text-xs text-brand-muted/95">
+                <span className={`w-1.5 h-1.5 rounded-full ${p.isOnline ? "bg-emerald-600/80" : "bg-neutral-600/50"}`} />
+                <span>{p.name} <span className="text-[9px] text-brand-muted/50">({getRoleLabel(p.id)})</span></span>
               </div>
             ))}
           </div>
@@ -766,62 +1107,122 @@ export default function ChatRoom({
           )}
 
           {/* Core Chat Box Bar */}
-          <form onSubmit={handleSendText} className="relative flex items-center space-x-2">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              className="hidden"
-              id="file-element"
-              multiple
-              accept="image/*,video/*,application/pdf,text/*,.zip,.rar,.doc,.docx"
-            />
-            {/* Attachment Button */}
-            <button
-              type="button"
-              id="clip-btn"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploadingFile || !!multiUploadProgress}
-              title="Attach media secure files"
-              className="flex items-center justify-center p-3 bg-brand-bg hover:bg-brand-accent-light text-brand-muted hover:text-brand-text rounded-xl border border-brand-border transition-colors disabled:opacity-50 cursor-pointer"
-            >
-              <Paperclip className="w-4 h-4 stroke-[1.5]" />
-            </button>
-
-            {/* Main input string */}
-            <input
-              type="text"
-              id="chat-input"
-              value={inputText}
-              onChange={handleInputChange}
-              onPaste={handlePaste}
-              disabled={isSendingMessage || isUploadingFile || !!multiUploadProgress}
-              placeholder={room.participants.length > 1 ? "Formulate a message..." : "Share link above to invite guests..."}
-              className="flex-1 bg-brand-bg outline-none border border-brand-border focus:border-brand-text/50 text-sm py-3 px-4 rounded-xl font-light transition-all disabled:opacity-50"
-              autoComplete="off"
-            />
-
-            {/* Send Button */}
-            <AnimatePresence>
-              {inputText.trim() && (
-                <motion.button
-                  type="submit"
-                  id="send-msg-btn"
-                  onMouseDown={(e) => e.preventDefault()}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.15 }}
-                  disabled={isSendingMessage}
-                  className="p-3 bg-brand-accent hover:bg-brand-text text-brand-bg rounded-xl flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
+          {isRecordingVoice ? (
+            <div className="flex items-center justify-between bg-brand-accent-light border border-brand-border rounded-xl p-3 animate-msg-fade w-full space-x-4">
+              <div className="flex items-center space-x-3 text-red-500 font-mono text-xs">
+                <span className="w-2.5 h-2.5 bg-red-600 rounded-full animate-pulse" />
+                <span>Recording Voice Note · {formatDuration(voiceDuration)}</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                {/* Trash button (Cancel) */}
+                <button
+                  type="button"
+                  onClick={cancelVoiceRecording}
+                  title="Cancel Recording"
+                  className="p-2.5 hover:bg-brand-bg text-brand-muted hover:text-rose-500 rounded-lg transition-colors cursor-pointer border border-brand-border"
                 >
-                  <Send className="w-4 h-4 stroke-[1.5]" />
-                </motion.button>
-              )}
-            </AnimatePresence>
-          </form>
+                  <Trash2 className="w-4 h-4 stroke-[1.5]" />
+                </button>
+                {/* Check / Send button */}
+                <button
+                  type="button"
+                  onClick={sendVoiceRecording}
+                  title="Send Voice Note"
+                  className="p-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-all cursor-pointer shadow-xs"
+                >
+                  <Check className="w-4 h-4 stroke-[1.5]" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={handleSendText} className="relative flex items-center space-x-2">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                className="hidden"
+                id="file-element"
+                multiple
+                accept="image/*,video/*,application/pdf,text/*,.zip,.rar,.doc,.docx"
+              />
+              
+              {/* Camera Button */}
+              <button
+                type="button"
+                id="camera-btn"
+                onClick={openCameraModal}
+                disabled={isUploadingFile || !!multiUploadProgress}
+                title="Take photo or video from Camera"
+                className="flex items-center justify-center p-3 bg-brand-bg hover:bg-brand-accent-light text-brand-muted hover:text-brand-text rounded-xl border border-brand-border transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                <Camera className="w-4 h-4 stroke-[1.5]" />
+              </button>
+
+              {/* Attachment Button */}
+              <button
+                type="button"
+                id="clip-btn"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploadingFile || !!multiUploadProgress}
+                title="Attach media secure files"
+                className="flex items-center justify-center p-3 bg-brand-bg hover:bg-brand-accent-light text-brand-muted hover:text-brand-text rounded-xl border border-brand-border transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                <Paperclip className="w-4 h-4 stroke-[1.5]" />
+              </button>
+
+              {/* Main input string */}
+              <input
+                type="text"
+                id="chat-input"
+                value={inputText}
+                onChange={handleInputChange}
+                onPaste={handlePaste}
+                disabled={isSendingMessage || isUploadingFile || !!multiUploadProgress}
+                placeholder={room.participants.length > 1 ? "Formulate a message..." : "Share link above to invite guests..."}
+                className="flex-1 bg-brand-bg outline-none border border-brand-border focus:border-brand-text/50 text-sm py-3 px-4 rounded-xl font-light transition-all disabled:opacity-50"
+                autoComplete="off"
+              />
+
+              {/* Send or Voice Record button toggle */}
+              <AnimatePresence mode="wait">
+                {inputText.trim() ? (
+                  <motion.button
+                    key="send"
+                    type="submit"
+                    id="send-msg-btn"
+                    onMouseDown={(e) => e.preventDefault()}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    disabled={isSendingMessage}
+                    className="p-3 bg-brand-accent hover:bg-brand-text text-brand-bg rounded-xl flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
+                  >
+                    <Send className="w-4 h-4 stroke-[1.5]" />
+                  </motion.button>
+                ) : (
+                  <motion.button
+                    key="voice"
+                    type="button"
+                    onClick={startVoiceRecording}
+                    id="voice-msg-btn"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    disabled={isUploadingFile || !!multiUploadProgress}
+                    title="Record Voice Note"
+                    className="p-3 bg-brand-accent-light hover:bg-brand-accent text-brand-muted hover:text-brand-bg rounded-xl flex items-center justify-center border border-brand-border transition-colors cursor-pointer shadow-xs"
+                  >
+                    <Mic className="w-4 h-4 stroke-[1.5]" />
+                  </motion.button>
+                )}
+              </AnimatePresence>
+            </form>
+          )}
         </div>
       </footer>
+      </div>
 
       {/* Drag & Drop Overlay */}
       <AnimatePresence>
@@ -1039,33 +1440,159 @@ export default function ChatRoom({
       </AnimatePresence>
 
       {/* Screen Protection Overlay */}
-      {isScreenSuspended && (
-        <div className="fixed inset-0 z-[999] bg-brand-bg/95 backdrop-blur-xl flex flex-col items-center justify-center space-y-4 p-6 select-none pointer-events-auto">
-          <div className="w-16 h-16 rounded-full bg-brand-accent-light flex items-center justify-center border border-brand-border text-brand-accent">
-            <svg
-              className="w-8 h-8 animate-pulse"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+      <AnimatePresence>
+        {isScreenSuspended && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="fixed inset-0 z-[999] bg-brand-bg/98 backdrop-blur-2xl flex flex-col items-center justify-center space-y-5 p-6 select-none pointer-events-auto"
+          >
+            <div className="w-16 h-16 rounded-full bg-brand-accent-light flex items-center justify-center border border-brand-border text-brand-accent shadow-lg">
+              <svg
+                className="w-8 h-8 animate-pulse text-brand-text"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                />
+              </svg>
+            </div>
+            <div className="text-center space-y-2 max-w-sm">
+              <h3 className="font-display text-xl font-semibold text-brand-text tracking-wide">
+                Visual Capture Blocked
+              </h3>
+              <p className="text-xs font-light text-brand-muted leading-relaxed max-w-xs mx-auto">
+                Tenfold privacy security active. Visual interface is hidden when window focus is lost or screen recording starts.
+              </p>
+            </div>
+
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={resumeScreen}
+              className="mt-6 px-6 py-3 bg-brand-accent hover:bg-brand-text text-brand-bg hover:text-brand-bg font-display font-medium text-xs tracking-widest uppercase rounded-xl transition-all duration-200 cursor-pointer shadow-md flex items-center space-x-2"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-              />
-            </svg>
-          </div>
-          <div className="text-center space-y-2 max-w-xs">
-            <h3 className="font-display text-lg font-medium text-brand-text">
-              Visual Capture Blocked
-            </h3>
-            <p className="text-xs font-light text-brand-muted leading-relaxed">
-              Tenfold security active. Visual interface is hidden when screen capture tool is active or window focus is lost.
-            </p>
-          </div>
-        </div>
-      )}
+              <span>Resume Session</span>
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Camera Capture Modal */}
+      <AnimatePresence>
+        {isCameraModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-neutral-950/95 backdrop-blur-sm flex flex-col justify-between p-6 select-none"
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between text-white border-b border-white/5 pb-3">
+              <span className="text-xs font-mono tracking-wide uppercase">
+                {cameraMode === "photo" ? "Camera Snapshot" : "Video Recording"}
+              </span>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={toggleFacingMode}
+                  title="Switch Camera"
+                  className="p-2 hover:bg-white/10 rounded-full transition-colors cursor-pointer text-white/80"
+                >
+                  <RefreshCw className="w-4 h-4 stroke-[1.5]" />
+                </button>
+                <button
+                  type="button"
+                  onClick={closeCameraModal}
+                  className="p-2 hover:bg-white/10 rounded-full transition-colors cursor-pointer text-white/80 hover:text-white"
+                >
+                  <X className="w-5 h-5 stroke-[1.5]" />
+                </button>
+              </div>
+            </div>
+
+            {/* Viewfinder Container */}
+            <div className="flex-1 flex items-center justify-center min-h-0 py-6">
+              <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-black max-h-full max-w-full aspect-video flex items-center justify-center">
+                <video
+                  ref={cameraVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="max-h-full max-w-full object-contain"
+                />
+
+                {isRecordingVideo && (
+                  <div className="absolute top-4 left-4 bg-red-600/90 text-white font-mono text-[10px] px-2 py-0.5 rounded-full flex items-center space-x-1.5 animate-pulse">
+                    <span className="w-1.5 h-1.5 bg-white rounded-full" />
+                    <span>{formatDuration(videoDuration)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Controls Footer */}
+            <div className="flex flex-col items-center space-y-4 pt-2 border-t border-white/5">
+              {!isRecordingVideo && (
+                <div className="flex bg-zinc-900 border border-zinc-800 rounded-full p-0.5 text-[10px] font-mono uppercase text-zinc-400">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCameraMode("photo");
+                      startCamera("photo", facingMode);
+                    }}
+                    className={`px-4 py-1.5 rounded-full transition-all cursor-pointer ${cameraMode === "photo" ? "bg-zinc-800 text-white font-medium" : "hover:text-white"}`}
+                  >
+                    Photo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCameraMode("video");
+                      startCamera("video", facingMode);
+                    }}
+                    className={`px-4 py-1.5 rounded-full transition-all cursor-pointer ${cameraMode === "video" ? "bg-zinc-800 text-white font-medium" : "hover:text-white"}`}
+                  >
+                    Video
+                  </button>
+                </div>
+              )}
+
+              <div className="flex items-center justify-center">
+                {cameraMode === "photo" ? (
+                  <button
+                    type="button"
+                    onClick={capturePhoto}
+                    className="w-14 h-14 bg-white hover:bg-neutral-200 border-4 border-zinc-800 rounded-full transition-all cursor-pointer shadow-lg active:scale-95"
+                    title="Take Photo"
+                  />
+                ) : isRecordingVideo ? (
+                  <button
+                    type="button"
+                    onClick={stopRecordingVideo}
+                    className="w-14 h-14 bg-red-600 hover:bg-red-500 border-4 border-zinc-800 rounded-2xl transition-all cursor-pointer shadow-lg active:scale-95 animate-pulse"
+                    title="Stop Recording"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={startRecordingVideo}
+                    className="w-14 h-14 bg-red-600 hover:bg-red-500 border-4 border-zinc-800 rounded-full transition-all cursor-pointer shadow-lg active:scale-95"
+                    title="Start Recording"
+                  />
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
