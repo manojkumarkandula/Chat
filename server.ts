@@ -283,7 +283,7 @@ app.post("/api/rooms/:roomId/messages", (req, res) => {
     senderId,
     senderName,
     type,
-    text: type === "text" ? text : "",
+    text: type === "text" ? text : (text || ""),
     file: finalFileConfig,
     timestamp,
     status,

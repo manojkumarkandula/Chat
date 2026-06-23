@@ -395,7 +395,7 @@ export default function App() {
   };
 
   // Upload/Send File attachment payload
-  const handleSendFile = async (name: string, base64: string, mimeType: string) => {
+  const handleSendFile = async (name: string, base64: string, mimeType: string, caption?: string) => {
     if (!currentRoomId) return;
     setIsUploadingFile(true);
     setUploadProgress("Shredding upload bytes...");
@@ -406,6 +406,7 @@ export default function App() {
         senderId: userId,
         senderName: userName,
         type: "file",
+        text: caption || "",
         file: {
           name,
           base64,

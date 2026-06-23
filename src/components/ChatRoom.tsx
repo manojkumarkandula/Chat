@@ -15,7 +15,7 @@ interface ChatRoomProps {
   room: Room;
   currentUserId: string;
   onSendMessage: (text: string) => Promise<void>;
-  onSendFile: (name: string, base64: string, mimeType: string) => Promise<void>;
+  onSendFile: (name: string, base64: string, mimeType: string, caption?: string) => Promise<void>;
   onSendTyping: (isTyping: boolean) => Promise<void>;
   onMarkAsRead: () => Promise<void>;
   onLeaveRoom: () => void;
@@ -58,6 +58,17 @@ export default function ChatRoom({
     y: number;
     isMobile: boolean;
   } | null>(null);
+
+  const [cameraDraft, setCameraDraft] = useState<{
+    url: string;
+    base64: string;
+    mimeType: string;
+    name: string;
+    type: "photo" | "video";
+  } | null>(null);
+  const [draftCaption, setDraftCaption] = useState("");
+  const [zoom, setZoom] = useState(1);
+  const [zoomCapabilities, setZoomCapabilities] = useState<{ min: number; max: number; step: number } | null>(null);
 
   const getGroupedReactions = (reactions?: Record<string, string>) => {
     if (!reactions) return [];
@@ -121,6 +132,28 @@ export default function ChatRoom({
       if (cameraVideoRef.current) {
         cameraVideoRef.current.srcObject = stream;
       }
+
+      // Initialize zoom settings from track capabilities
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        try {
+          const capabilities = videoTrack.getCapabilities() as any;
+          if (capabilities && capabilities.zoom) {
+            setZoomCapabilities({
+              min: capabilities.zoom.min || 1,
+              max: capabilities.zoom.max || 4,
+              step: capabilities.zoom.step || 0.1
+            });
+            setZoom((videoTrack.getSettings() as any).zoom || 1);
+          } else {
+            setZoomCapabilities(null);
+            setZoom(1); // fallback to CSS zoom default
+          }
+        } catch (e) {
+          setZoomCapabilities(null);
+          setZoom(1);
+        }
+      }
     } catch (err) {
       console.error("Camera access failed:", err);
       alert("Failed to access camera device. Please check permissions.");
@@ -137,6 +170,27 @@ export default function ChatRoom({
     setVideoDuration(0);
     setIsRecordingVideo(false);
     recordedVideoChunksRef.current = [];
+    setZoom(1);
+    setZoomCapabilities(null);
+  };
+
+  const handleZoomChange = async (val: number) => {
+    setZoom(val);
+    if (cameraStream) {
+      const videoTrack = cameraStream.getVideoTracks()[0];
+      if (videoTrack) {
+        try {
+          const capabilities = videoTrack.getCapabilities() as any;
+          if (capabilities && capabilities.zoom) {
+            await videoTrack.applyConstraints({
+              advanced: [{ zoom: val } as any]
+            });
+          }
+        } catch (err) {
+          console.warn("Failed to apply native zoom constraint:", err);
+        }
+      }
+    }
   };
 
   const toggleFacingMode = () => {
@@ -153,6 +207,14 @@ export default function ChatRoom({
   };
 
   const closeCameraModal = () => {
+    if (cameraDraft) {
+      const { url } = cameraDraft;
+      if (url.startsWith("blob:")) {
+        URL.revokeObjectURL(url);
+      }
+    }
+    setCameraDraft(null);
+    setDraftCaption("");
     stopCamera();
     setIsCameraModalOpen(false);
   };
@@ -167,8 +229,18 @@ export default function ChatRoom({
     if (ctx) {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const base64 = canvas.toDataURL("image/jpeg");
-      onSendFile(`camera-snap-${Date.now()}.jpg`, base64, "image/jpeg");
-      closeCameraModal();
+      
+      // Stop the viewfinder stream
+      stopCamera();
+      
+      setCameraDraft({
+        url: base64,
+        base64,
+        mimeType: "image/jpeg",
+        name: `camera-snap-${Date.now()}.jpg`,
+        type: "photo"
+      });
+      setDraftCaption("");
     }
   };
 
@@ -209,8 +281,15 @@ export default function ChatRoom({
         reader.onloadend = async () => {
           const base64 = reader.result as string;
           if (base64) {
-            const ext = mime.includes("mp4") ? "mp4" : "webm";
-            await onSendFile(`video-record-${Date.now()}.${ext}`, base64, mime);
+            const draftUrl = URL.createObjectURL(blob);
+            setCameraDraft({
+              url: draftUrl,
+              base64,
+              mimeType: mime,
+              name: `video-record-${Date.now()}.${mime.includes("mp4") ? "mp4" : "webm"}`,
+              type: "video"
+            });
+            setDraftCaption("");
           }
         };
         reader.readAsDataURL(blob);
@@ -233,6 +312,37 @@ export default function ChatRoom({
   const stopRecordingVideo = () => {
     if (mediaRecorderRef.current && isRecordingVideo) {
       mediaRecorderRef.current.stop();
+    }
+  };
+
+  const sendDraft = async () => {
+    if (!cameraDraft) return;
+    const { name, base64, mimeType, url } = cameraDraft;
+    
+    if (url.startsWith("blob:")) {
+      URL.revokeObjectURL(url);
+    }
+    
+    setCameraDraft(null);
+    setIsCameraModalOpen(false);
+    
+    await onSendFile(name, base64, mimeType, draftCaption.trim());
+    setDraftCaption("");
+  };
+
+  const discardDraft = () => {
+    if (cameraDraft) {
+      const { url } = cameraDraft;
+      if (url.startsWith("blob:")) {
+        URL.revokeObjectURL(url);
+      }
+    }
+    setCameraDraft(null);
+    setDraftCaption("");
+    // If the modal was opened from camera button, resume the camera stream
+    if (cameraVideoRef.current || !cameraStream) {
+      startCamera(cameraMode, facingMode);
+    } else {
       setIsCameraModalOpen(false);
     }
   };
@@ -623,7 +733,18 @@ export default function ChatRoom({
       reader.onload = async (e) => {
         const base64 = e.target?.result as string;
         if (base64) {
-          await onSendFile(file.name, base64, file.type);
+          const isVideo = file.type.startsWith("video/");
+          const isPhoto = file.type.startsWith("image/");
+          
+          setCameraDraft({
+            url: isPhoto || isVideo ? URL.createObjectURL(file) : base64,
+            base64,
+            mimeType: file.type,
+            name: file.name,
+            type: isVideo ? "video" : "photo"
+          });
+          setDraftCaption("");
+          setIsCameraModalOpen(true); // Open the preview modal
         }
       };
       reader.readAsDataURL(file);
@@ -721,6 +842,11 @@ export default function ChatRoom({
                 <Eye className="w-3.5 h-3.5" />
               </div>
             </div>
+            {msg.text && (
+              <p className="text-sm font-light text-brand-text px-1 mt-1 text-left whitespace-pre-wrap break-words">
+                {msg.text}
+              </p>
+            )}
             <div className="flex items-center space-x-1.5 text-[10px] text-brand-muted font-mono">
               <span className="truncate max-w-xs">{f.name}</span>
               <span>·</span>
@@ -749,6 +875,11 @@ export default function ChatRoom({
                 className="max-h-60 w-full"
               />
             </div>
+            {msg.text && (
+              <p className="text-sm font-light text-brand-text px-1 mt-1 text-left whitespace-pre-wrap break-words">
+                {msg.text}
+              </p>
+            )}
             <div className="flex items-center space-x-1.5 text-[10px] text-brand-muted font-mono">
               <span className="truncate max-w-xs">{f.name}</span>
               <span>·</span>
@@ -777,6 +908,11 @@ export default function ChatRoom({
                 className="w-full h-8 bg-transparent text-brand-text"
               />
             </div>
+            {msg.text && (
+              <p className="text-sm font-light text-brand-text px-1 mt-1.5 text-left whitespace-pre-wrap break-words">
+                {msg.text}
+              </p>
+            )}
             <div className="flex items-center space-x-1.5 text-[10px] text-brand-muted font-mono px-1">
               <span className="truncate max-w-xs">{f.name}</span>
               <span>·</span>
@@ -807,6 +943,11 @@ export default function ChatRoom({
             <p className="text-[10px] font-mono text-brand-muted mt-0.5">
               {formatBytes(f.size)}
             </p>
+            {msg.text && (
+              <p className="text-xs font-light text-brand-muted/90 mt-1 text-left whitespace-pre-wrap break-words border-t border-brand-border/40 pt-1">
+                {msg.text}
+              </p>
+            )}
           </div>
           <a
             href={f.url}
@@ -1492,104 +1633,212 @@ export default function ChatRoom({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-neutral-950/95 backdrop-blur-sm flex flex-col justify-between p-6 select-none"
+            className="fixed inset-0 z-50 bg-neutral-950 flex flex-col justify-between p-4 select-none"
           >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between text-white border-b border-white/5 pb-3">
-              <span className="text-xs font-mono tracking-wide uppercase">
-                {cameraMode === "photo" ? "Camera Snapshot" : "Video Recording"}
-              </span>
-              <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={toggleFacingMode}
-                  title="Switch Camera"
-                  className="p-2 hover:bg-white/10 rounded-full transition-colors cursor-pointer text-white/80"
-                >
-                  <RefreshCw className="w-4 h-4 stroke-[1.5]" />
-                </button>
-                <button
-                  type="button"
-                  onClick={closeCameraModal}
-                  className="p-2 hover:bg-white/10 rounded-full transition-colors cursor-pointer text-white/80 hover:text-white"
-                >
-                  <X className="w-5 h-5 stroke-[1.5]" />
-                </button>
-              </div>
-            </div>
-
-            {/* Viewfinder Container */}
-            <div className="flex-1 flex items-center justify-center min-h-0 py-6">
-              <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-black max-h-full max-w-full aspect-video flex items-center justify-center">
-                <video
-                  ref={cameraVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="max-h-full max-w-full object-contain"
-                />
-
-                {isRecordingVideo && (
-                  <div className="absolute top-4 left-4 bg-red-600/90 text-white font-mono text-[10px] px-2 py-0.5 rounded-full flex items-center space-x-1.5 animate-pulse">
-                    <span className="w-1.5 h-1.5 bg-white rounded-full" />
-                    <span>{formatDuration(videoDuration)}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Modal Controls Footer */}
-            <div className="flex flex-col items-center space-y-4 pt-2 border-t border-white/5">
-              {!isRecordingVideo && (
-                <div className="flex bg-zinc-900 border border-zinc-800 rounded-full p-0.5 text-[10px] font-mono uppercase text-zinc-400">
+            {cameraDraft ? (
+              <div className="absolute inset-0 bg-neutral-950 flex flex-col justify-between p-4 z-20">
+                {/* Draft Header */}
+                <div className="flex items-center justify-between text-white pb-3 border-b border-white/10">
+                  <span className="text-xs font-mono truncate max-w-xs">{cameraDraft.name}</span>
                   <button
                     type="button"
-                    onClick={() => {
-                      setCameraMode("photo");
-                      startCamera("photo", facingMode);
-                    }}
-                    className={`px-4 py-1.5 rounded-full transition-all cursor-pointer ${cameraMode === "photo" ? "bg-zinc-800 text-white font-medium" : "hover:text-white"}`}
+                    onClick={discardDraft}
+                    className="p-2 hover:bg-white/10 rounded-full transition-colors cursor-pointer text-white/80"
                   >
-                    Photo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCameraMode("video");
-                      startCamera("video", facingMode);
-                    }}
-                    className={`px-4 py-1.5 rounded-full transition-all cursor-pointer ${cameraMode === "video" ? "bg-zinc-800 text-white font-medium" : "hover:text-white"}`}
-                  >
-                    Video
+                    <X className="w-5 h-5" />
                   </button>
                 </div>
-              )}
 
-              <div className="flex items-center justify-center">
-                {cameraMode === "photo" ? (
+                {/* Draft Preview Container */}
+                <div className="flex-1 flex items-center justify-center min-h-0 py-4">
+                  {cameraDraft.type === "video" ? (
+                    <video
+                      src={cameraDraft.url}
+                      controls
+                      autoPlay
+                      loop
+                      className="max-h-full max-w-full object-contain rounded-lg shadow-xl"
+                    />
+                  ) : cameraDraft.mimeType.startsWith("image/") ? (
+                    <img
+                      src={cameraDraft.url}
+                      alt="Captured Draft"
+                      className="max-h-full max-w-full object-contain rounded-lg shadow-xl"
+                    />
+                  ) : (
+                    <div className="p-8 bg-zinc-900 border border-zinc-800 rounded-2xl flex flex-col items-center justify-center space-y-4 max-w-xs text-center">
+                      <FileText className="w-12 h-12 text-brand-muted" />
+                      <div>
+                        <p className="text-sm font-medium text-brand-text truncate max-w-[200px]">{cameraDraft.name}</p>
+                        <p className="text-[10px] font-mono text-brand-muted mt-1">Ready to share securely</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Draft Footer Caption Input & Send */}
+                <div className="flex items-center space-x-3 pt-4 border-t border-white/10">
+                  <input
+                    type="text"
+                    value={draftCaption}
+                    onChange={(e) => setDraftCaption(e.target.value)}
+                    placeholder="Add a caption..."
+                    className="flex-1 bg-zinc-900 text-white outline-none border border-zinc-800 focus:border-zinc-700 text-sm py-3 px-4 rounded-xl font-light transition-all"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        sendDraft();
+                      }
+                    }}
+                  />
                   <button
                     type="button"
-                    onClick={capturePhoto}
-                    className="w-14 h-14 bg-white hover:bg-neutral-200 border-4 border-zinc-800 rounded-full transition-all cursor-pointer shadow-lg active:scale-95"
-                    title="Take Photo"
-                  />
-                ) : isRecordingVideo ? (
-                  <button
-                    type="button"
-                    onClick={stopRecordingVideo}
-                    className="w-14 h-14 bg-red-600 hover:bg-red-500 border-4 border-zinc-800 rounded-2xl transition-all cursor-pointer shadow-lg active:scale-95 animate-pulse"
-                    title="Stop Recording"
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={startRecordingVideo}
-                    className="w-14 h-14 bg-red-600 hover:bg-red-500 border-4 border-zinc-800 rounded-full transition-all cursor-pointer shadow-lg active:scale-95"
-                    title="Start Recording"
-                  />
-                )}
+                    onClick={sendDraft}
+                    className="p-3 bg-brand-accent hover:bg-white text-brand-bg rounded-xl flex items-center justify-center transition-colors shadow-lg cursor-pointer"
+                  >
+                    <Send className="w-4 h-4 stroke-[1.5]" />
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="absolute inset-0 bg-black flex flex-col justify-between p-4 z-10">
+                {/* Viewfinder Header */}
+                <div className="flex items-center justify-between text-white z-10">
+                  <span className="text-xs font-mono tracking-wide uppercase bg-black/40 px-3 py-1 rounded-full backdrop-blur-xs">
+                    {cameraMode === "photo" ? "Camera Snapshot" : "Video Recording"}
+                  </span>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={toggleFacingMode}
+                      title="Switch Camera"
+                      className="p-2 bg-black/40 hover:bg-white/10 rounded-full transition-colors cursor-pointer text-white/80"
+                    >
+                      <RefreshCw className="w-4 h-4 stroke-[1.5]" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={closeCameraModal}
+                      className="p-2 bg-black/40 hover:bg-white/10 rounded-full transition-colors cursor-pointer text-white/80 hover:text-white"
+                    >
+                      <X className="w-5 h-5 stroke-[1.5]" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Viewfinder Full-Screen video container */}
+                <div className="absolute inset-0 overflow-hidden flex items-center justify-center bg-black">
+                  <video
+                    ref={cameraVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{ transform: `scale(${zoom})`, transformOrigin: "center center" }}
+                    className="w-full h-full object-cover transition-transform duration-100"
+                  />
+
+                  {isRecordingVideo && (
+                    <div className="absolute top-16 left-4 bg-red-600/90 text-white font-mono text-[10px] px-2 py-0.5 rounded-full flex items-center space-x-1.5 animate-pulse z-10">
+                      <span className="w-1.5 h-1.5 bg-white rounded-full" />
+                      <span>{formatDuration(videoDuration)}</span>
+                    </div>
+                  )}
+
+                  {/* Zoom Presets Overlay */}
+                  <div className="absolute bottom-28 left-0 right-0 flex justify-center space-x-3 z-10 select-none">
+                    {[1, 2, 4].map((zVal) => (
+                      <button
+                        key={zVal}
+                        type="button"
+                        onClick={() => handleZoomChange(zVal)}
+                        className={`w-9 h-9 rounded-full text-xs font-semibold flex items-center justify-center transition-all ${
+                          Math.abs(zoom - zVal) < 0.05
+                            ? "bg-brand-accent text-brand-bg scale-110"
+                            : "bg-black/50 text-white/80 hover:bg-black/75 hover:text-white"
+                        }`}
+                      >
+                        {zVal}x
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Zoom Slider Overlay */}
+                  <div className="absolute bottom-20 left-12 right-12 flex items-center space-x-3 z-10 bg-black/40 backdrop-blur-xs px-4 py-1.5 rounded-full max-w-sm mx-auto">
+                    <span className="text-[10px] font-mono text-white/70">1x</span>
+                    <input
+                      type="range"
+                      min={zoomCapabilities ? zoomCapabilities.min : 1}
+                      max={zoomCapabilities ? zoomCapabilities.max : 4}
+                      step={zoomCapabilities ? zoomCapabilities.step : 0.1}
+                      value={zoom}
+                      onChange={(e) => handleZoomChange(parseFloat(e.target.value))}
+                      className="flex-1 accent-brand-accent h-1 rounded-lg cursor-pointer bg-white/20"
+                    />
+                    <span className="text-[10px] font-mono text-white/70">
+                      {zoomCapabilities ? `${zoomCapabilities.max}x` : "4x"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Modal Controls Footer */}
+                <div className="flex flex-col items-center space-y-4 pt-2 z-10 bg-gradient-to-t from-black/80 to-transparent pb-4">
+                  {!isRecordingVideo && (
+                    <div className="flex bg-zinc-900/80 backdrop-blur-xs border border-zinc-800 rounded-full p-0.5 text-[10px] font-mono uppercase text-zinc-400">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCameraMode("photo");
+                          startCamera("photo", facingMode);
+                        }}
+                        className={`px-4 py-1.5 rounded-full transition-all cursor-pointer ${
+                          cameraMode === "photo" ? "bg-zinc-800 text-white font-medium" : "hover:text-white"
+                        }`}
+                      >
+                        Photo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCameraMode("video");
+                          startCamera("video", facingMode);
+                        }}
+                        className={`px-4 py-1.5 rounded-full transition-all cursor-pointer ${
+                          cameraMode === "video" ? "bg-zinc-800 text-white font-medium" : "hover:text-white"
+                        }`}
+                      >
+                        Video
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-center">
+                    {cameraMode === "photo" ? (
+                      <button
+                        type="button"
+                        onClick={capturePhoto}
+                        className="w-14 h-14 bg-white hover:bg-neutral-200 border-4 border-zinc-800 rounded-full transition-all cursor-pointer shadow-lg active:scale-95"
+                        title="Take Photo"
+                      />
+                    ) : isRecordingVideo ? (
+                      <button
+                        type="button"
+                        onClick={stopRecordingVideo}
+                        className="w-14 h-14 bg-red-600 hover:bg-red-500 border-4 border-zinc-800 rounded-2xl transition-all cursor-pointer shadow-lg active:scale-95 animate-pulse"
+                        title="Stop Recording"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={startRecordingVideo}
+                        className="w-14 h-14 bg-red-600 hover:bg-red-500 border-4 border-zinc-800 rounded-full transition-all cursor-pointer shadow-lg active:scale-95"
+                        title="Start Recording"
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

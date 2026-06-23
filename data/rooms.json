@@ -418,5 +418,61 @@
     ],
     "messages": [],
     "maxParticipants": 2
+  },
+  "src8-si1i-gqi9": {
+    "id": "src8-si1i-gqi9",
+    "participants": [
+      {
+        "id": "usr-sl0vxl8o6v",
+        "name": "Alice",
+        "joinedAt": "2026-06-22T08:32:43.890Z",
+        "isOnline": false,
+        "isTyping": false
+      }
+    ],
+    "messages": [],
+    "maxParticipants": 10
+  },
+  "6tlg-z881-cvc8": {
+    "id": "6tlg-z881-cvc8",
+    "participants": [
+      {
+        "id": "usr-zootl3aw5p",
+        "name": "m",
+        "joinedAt": "2026-06-22T08:31:38.707Z",
+        "isOnline": false,
+        "isTyping": false
+      }
+    ],
+    "messages": [],
+    "maxParticipants": 2
+  },
+  "u4qs-cv1m-eb83": {
+    "id": "u4qs-cv1m-eb83",
+    "participants": [
+      {
+        "id": "usr-sl0vxl8o6v",
+        "name": "Alice",
+        "joinedAt": "2026-06-22T08:37:10.893Z",
+        "isOnline": false,
+        "isTyping": false
+      }
+    ],
+    "messages": [],
+    "maxParticipants": 10
+  },
+  "9kcs-cqco-mbk7": {
+    "id": "9kcs-cqco-mbk7",
+    "participants": [
+      {
+        "id": "usr-sl0vxl8o6v",
+        "name": "Bob",
+        "joinedAt": "2026-06-22T08:41:01.285Z",
+        "isOnline": false,
+        "isTyping": false
+      }
+    ],
+    "messages": [],
+    "maxParticipants": 10
   }
 }
